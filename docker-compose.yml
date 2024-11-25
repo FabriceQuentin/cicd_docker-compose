@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  ci-server:
+    image: jenkins/jenkins:lts
+    container_name: ci-server
+    privileged: true
+    ports:
+      - "8081:8080"
+      - "50000:50000"
+    volumes:
+      - /home/ubuntu/jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    user: root
+    #entrypoint: sh -c "apt-get update && apt-get install -y maven && /usr/local/bin/jenkins.sh &&  usermod -aG docker jenkins"
+    entrypoint: sh -c "apt-get update && apt-get install -y maven docker.io && usermod -aG docker jenkins && /usr/local/bin/jenkins.sh"
+    networks:
+      - jenkins_network
+
+  sonarqube:
+    image: sonarqube:latest
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+#    sysctls:
+ #     - vm.max_map_count=262144
+    depends_on:
+      - db
+    networks:
+      - jenkins_network
+
+  db:
+    image: postgres:latest
+    container_name: db
+    environment:
+      POSTGRES_DB: sonarqube
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+    volumes:
+      - /home/ubuntu/db_data:/var/lib/postgresql/data
+    networks:
+      - jenkins_network
+
+  cd-server:
+    image: docker:latest
+    container_name: cd-server
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - jenkins_network
+    # Ajoutez un utilisateur pour exécuter des commandes Docker
+    entrypoint: sh -c "adduser -D myuser && addgroup myuser docker && su myuser && tail -f /dev/null"
+    # Exécuter le conteneur en tant que non-root
+    user: root
+
+
+volumes:
+  jenkins_home:
+    driver: local
+  db_data:
+networks:
+  jenkins_network:
+    driver: bridge
