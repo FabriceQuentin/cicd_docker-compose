@@ -1,0 +1,94 @@
+pipeline {
+    agent any
+        
+    
+    environment {
+        IMAGE_NAME = 'fabriceqt/my-app'
+        BUILD_NUMBER = 'env.BUILD_NUMBER'
+       
+    }
+    parameters {
+        string(name: 'BRANCH', defaultValue: 'master', description: 'Branch to build')
+    }
+    stages {
+   
+        stage('Checkout') {
+            steps {
+                //git branch: "${params.BRANCH}", url: 'https://github.com/edwin/hello-world-java-docker.git'
+              git branch: "${params.BRANCH}", url: 'https://github.com/FabriceQuentin/hello-world-java-docker.git'
+                
+            }
+         
+        }
+        
+        stage('Build') {
+            steps {
+                script {
+                    // Set the Maven tool name as defined in Jenkins
+                    
+                    // Run the Maven build
+                    sh "/usr/share/maven/bin/mvn clean install"
+                }
+            }
+        }
+        
+        stage('SonarQube analysis') {
+            steps {
+               script{ 
+                withSonarQubeEnv('sonar') {
+                    sh 'mvn clean package sonar:sonar'
+                }
+               }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Construction of our Docker image
+                    sh "pwd"
+                    sh "docker build -t $IMAGE_NAME:${BUILD_NUMBER} ."
+                }
+            }
+        }
+        
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    // Authenticate with Docker Hub
+                    withDockerRegistry([credentialsId: '1ab30a54-ce39-48be-a991-59bcc1791ec4', url: 'https://index.docker.io/v1/']) {
+                        // Push the Docker image to Docker Hub
+                        sh "docker push $IMAGE_NAME:${BUILD_NUMBER}"
+                    }
+                }
+            }
+        }
+        /*stage('Deploy to CD Server') {
+            steps {
+                script {
+            // Déployer l'application à l'intérieur du conteneur cd-server
+                       sh """
+                          docker exec cd-server sh -c "docker pull $IMAGE_NAME:$BUILD_NUMBER && docker run -d -p 8080:8080 $IMAGE_NAME:$BUILD_NUMBER"
+                        """
+                }
+            }
+        }*/
+        
+        stage('Deploy to CD Server') {
+             steps {
+                 script {
+            // Déployer l'application à l'intérieur du conteneur cd-server
+                         sh """
+                             docker exec cd-server sh -c "
+                                 docker stop my-app || true &&
+                                 docker rm my-app || true &&
+                                 docker pull $IMAGE_NAME:$BUILD_NUMBER &&
+                                 docker run -d -p 8082:8080 --name my-app $IMAGE_NAME:$BUILD_NUMBER
+                             "
+                         """
+        }
+    }
+}
+        
+    
+    }
+}
